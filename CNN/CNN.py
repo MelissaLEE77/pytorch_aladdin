@@ -1,6 +1,7 @@
 # Imports
 from select import KQ_NOTE_RENAME
-from turtle import forward
+from this import d
+from turtle import Turtle, forward
 import torch
 import torchvision # torch package for vision related things
 import torch.nn.functional as F  # Parameterless functions, like (some) activation functions
@@ -12,7 +13,8 @@ from torch.utils.data import DataLoader  # Gives easier dataset managment by cre
 from tqdm import tqdm  # For nice progress bar!
 
 
-# Create simple CNN 
+# Create simple CNN
+# convoulution layer -> image 정보 보존, image data(채널*세로*가로)로 구성, 3차원 data input -> output도 3차원
 class CNN(nn.Module):
     def __init__(self, in_channels=1, num_classes=10):
         super(CNN, self).__init__()
@@ -28,8 +30,16 @@ class CNN(nn.Module):
         x = self.pool(x)
         x = x.reshape(x.shape[0],-1)
         x = self.fc1(x)
-
         return x
+
+def save_checkpoint(state, filename = "my_checkpoint.pth.tar"):
+    print("=> Saving checkpoint")
+    torch.save(state, filename)
+
+def load_checkpoint(checkpoint):
+    print("=> loading checkpoint")
+    model.load_state_dict(checkpoint['state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
 
 ## Check model
 #model = CNN()
@@ -40,17 +50,18 @@ class CNN(nn.Module):
 #Set device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-Hyperparmeter
+#Hyperparmeter
 in_channels = 1
 num_classes = 10
 learning_rate = 0.001
 batch_size = 64
 num_epochs = 5
+load_model = True #False
 
 # Load data
-train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.ToTensor(), download=True)
+train_dataset = datasets.MNIST(root='./PYTORCH_CHEETSHEET/dataset/', train=True, transform=transforms.ToTensor(), download=True)
 train_loader = DataLoader(dataset=train_dataset, batch_size = batch_size, shuffle=True)
-test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms.ToTensor(), download=True)
+test_dataset = datasets.MNIST(root='./PYTORCH_CHEETSHEET/dataset/', train=False, transform=transforms.ToTensor(), download=True)
 test_loader = DataLoader(dataset=train_dataset, batch_size = batch_size, shuffle=True)
 
 #Initialize network
@@ -60,8 +71,18 @@ model = CNN().to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+if load_model:
+    load_checkpoint(torch.load("my_checkpoint.pth.tar"))
+
 #Train Network
 for epoch in range(num_epochs):
+    losses = []
+
+    # checkpoint로 model, optimizer, acuuracy 등을 저장
+    if epoch % 3 == 0:
+        checkpoint = {'state_dict':model.state_dict(),'optimizer': optimizer.state_dict()}
+        save_checkpoint(checkpoint)
+
     for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
         # Get data to cuda if possible
         data = data.to(device=device)
@@ -71,6 +92,7 @@ for epoch in range(num_epochs):
         #forward
         scores = model(data)
         loss = criterion(scores, targets)
+        losses.append(loss.item())
         #backward
         optimizer.zero_grad()
         loss.backward()

@@ -9,32 +9,39 @@ from torch import nn  # All neural network modules
 from torch.utils.data import DataLoader  # Gives easier dataset managment by creating mini batches etc.
 from tqdm import tqdm  # For nice progress bar!
 
-#Create Fully connected network
-class NN(nn.Module):
-    def __init__(self, input_size, num_classes):   ## inputsize -> MNIST data set의 경우 28*28 이미지로 구성되어 있어서 784 node
-        super(NN, self).__init__()
-        # 2 layer 쌓기
-        self.fc1 = nn.Linear(input_size, 50)    ##50->hidden layer의 node 갯수, 일반적으로 50은 매우 작음 
-        self.fc2 = nn.Linear(50, num_classes)
-    
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
-#model = NN(784,10)
-#x = torch.randn(64,784)
-#print(model(x).shape)
-
 #Set device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 #Hyperparmeter
-input_size = 784
+input_size = 28
+sequence_length = 28
+num_layers = 2
+hidden_size = 256
 num_classes = 10
 learning_rate = 0.001
 batch_size = 64
-num_epochs = 3
+num_epochs = 2
+
+# Recurrent neural network (many-to-one)
+class RNN(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, num_classes):
+        super(RNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size * sequence_length, num_classes)
+
+    def forward(self, x):
+        # Set initial hidden and cell states
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(device)
+
+        # Forward propagate LSTM
+        out, _ = self.rnn(x, h0)
+        out = out.reshape(out.shape[0], -1)
+
+        # Decode the hidden state of the last time step
+        out = self.fc(out)
+        return out
 
 # Load data
 train_dataset = datasets.MNIST(root='dataset/', train=True, transform=transforms.ToTensor(), download=True)
@@ -43,7 +50,7 @@ test_dataset = datasets.MNIST(root='dataset/', train=False, transform=transforms
 test_loader = DataLoader(dataset=train_dataset, batch_size = batch_size, shuffle=True)
 
 #Initialize network
-model = NN(input_size=input_size, num_classes=num_classes).to(device)
+model = RNN(input_size, hidden_size, num_layers, num_classes).to(device)
 
 #loss and optimizer
 criterion = nn.CrossEntropyLoss()
@@ -53,11 +60,8 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 for epoch in range(num_epochs):
     for batch_idx, (data, targets) in enumerate(tqdm(train_loader)):
         # Get data to cuda if possible
-        data = data.to(device=device)
+        data = data.to(device=device).squeeze(1)
         targets = targets.to(device=device)
-        #print(data.shape) -> data 확인용
-        #Get to correct shap (sigle dimesion으로 바꿔주기)
-        data = data.reshape(data.shape[0],-1)
         #forward
         scores = model(data)
         loss = criterion(scores, targets)
@@ -76,9 +80,8 @@ def check_accuracy(loader, model):
 
     with torch.no_grad():
         for x, y in loader:
-            x = x.to(device=device)
+            x = x.to(device=device).squeeze(1)
             y = y.to(device=device)
-            x = x.reshape(x.shape[0], -1)
 
             scores = model(x)
             _, predictions = scores.max(1)
