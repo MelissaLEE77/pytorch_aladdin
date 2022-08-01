@@ -19,7 +19,6 @@ def load_checkpoint(checkpoint, model, optimizer):
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
 
-
 def main():
     # Initialize network
     model = torchvision.models.vgg16(pretrained=False)
